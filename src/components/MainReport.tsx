@@ -660,13 +660,12 @@ export function MainReport() {
       )}
 
       <Card className="overflow-hidden">
-        <div id="mri-report-table" ref={tableRef} className="bg-white">
+        <div ref={tableRef} className="bg-white">
           <CardHeader className="flex flex-row items-center justify-between pb-2 relative">
             <div className="flex-1" />
             <CardTitle className="text-2xl text-center flex-1 whitespace-nowrap">2026 MRI Production Weekly Report</CardTitle>
-            {!new URLSearchParams(window.location.search).get('bot') ? (
-              <div className="flex items-center gap-2 flex-1 justify-end flex-wrap">
-                <div className="flex items-center gap-2">
+            <div className="flex items-center gap-2 flex-1 justify-end flex-wrap">
+              <div className="flex items-center gap-2">
                 <Select value={selectedWeek.toString()} onValueChange={(v) => setSelectedWeek(parseInt(v))}>
                   <SelectTrigger className="w-[120px] h-10 font-bold">
                     <SelectValue placeholder="Select Week" />
@@ -732,9 +731,6 @@ export function MainReport() {
                 <Plus className="h-4 w-4" />
               </Button>
             </div>
-            ) : (
-              <div className="flex-1" />
-            )}
           </CardHeader>
           <CardContent className="p-0 overflow-x-auto">
             <div className="p-4">
@@ -897,7 +893,7 @@ export function MainReport() {
                 <Table className="border">
                   <TableHeader>
                     <TableRow>
-                      {['Date', 'Shift', 'Section', 'Material Type', 'Material Name', 'Machine No', 'Op. ID', 'Weight (kg)', 'Main Reason', 'Reason', 'Picture', 'Recorded At'].map((head, idx) => (
+                      {['Date', 'Shift', 'Section', 'Material Type', 'Material Name', 'Weight (kg)', 'Main Reason', 'Reason', 'Picture', 'Recorded At'].map((head, idx) => (
                         <TableHead 
                           key={idx} 
                           className={cn("cursor-pointer hover:bg-gray-100 transition-colors", highlightedCols.includes(idx) && "bg-yellow-100 text-yellow-900 font-bold")}
@@ -920,13 +916,11 @@ export function MainReport() {
                         <TableCell className={cn(highlightedCols.includes(2) && "bg-yellow-50")}>{scrap.section}</TableCell>
                         <TableCell className={cn("font-medium", highlightedCols.includes(3) && "bg-yellow-50")}>{scrap.material}</TableCell>
                         <TableCell className={cn(highlightedCols.includes(4) && "bg-yellow-50")}>{scrap.materialName || '-'}</TableCell>
-                        <TableCell className={cn(highlightedCols.includes(5) && "bg-yellow-50")}>{scrap.machineNo || '-'}</TableCell>
-                        <TableCell className={cn(highlightedCols.includes(6) && "bg-yellow-50")}>{scrap.operatorId || '-'}</TableCell>
-                        <TableCell className={cn(highlightedCols.includes(7) && "bg-yellow-50")}>{typeof scrap.weight === 'number' ? (scrap.weight === 0 ? '0' : scrap.weight.toFixed(1)) : (scrap.weight || '0')}</TableCell>
-                        <TableCell className={cn(highlightedCols.includes(8) && "bg-yellow-50")}>
+                        <TableCell className={cn(highlightedCols.includes(5) && "bg-yellow-50")}>{typeof scrap.weight === 'number' ? (scrap.weight === 0 ? '0' : scrap.weight.toFixed(1)) : (scrap.weight || '0')}</TableCell>
+                        <TableCell className={cn(highlightedCols.includes(6) && "bg-yellow-50")}>
                           {scrap.mainReason || '-'}
                         </TableCell>
-                        <TableCell className={cn(highlightedCols.includes(9) && "bg-yellow-50")}>
+                        <TableCell className={cn(highlightedCols.includes(7) && "bg-yellow-50")}>
                           {editingScrap === scrap.timestamp ? (
                             <div className="flex items-center gap-2">
                               <input 
@@ -969,7 +963,7 @@ export function MainReport() {
                             </div>
                           )}
                         </TableCell>
-                        <TableCell className={cn(highlightedCols.includes(10) && "bg-yellow-50")}>
+                        <TableCell className={cn(highlightedCols.includes(8) && "bg-yellow-50")}>
                           {scrap.imageUrl ? (
                             <a href={scrap.imageUrl} target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline">
                               View Image
@@ -978,7 +972,7 @@ export function MainReport() {
                             <span className="text-muted-foreground text-sm">No image</span>
                           )}
                         </TableCell>
-                        <TableCell className={cn("text-muted-foreground whitespace-nowrap", highlightedCols.includes(11) && "bg-yellow-50")}>{formatToIST(scrap.timestamp || scrap.time || '-')}</TableCell>
+                        <TableCell className={cn("text-muted-foreground whitespace-nowrap", highlightedCols.includes(9) && "bg-yellow-50")}>{formatToIST(scrap.timestamp || scrap.time || '-')}</TableCell>
                       </TableRow>
                     ))}
                   </TableBody>
