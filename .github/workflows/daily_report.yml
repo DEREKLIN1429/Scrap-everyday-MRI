@@ -1,0 +1,36 @@
+name: Daily Report Screenshot & LINE Push
+
+on:
+  workflow_dispatch:
+
+jobs:
+  screenshot_and_send:
+    runs-on: ubuntu-latest
+    env:
+      FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '24' # Updated to Node 24 to fix deprecation warning
+
+      - name: Install Bot Dependencies
+        # We install these here instead of package.json to keep the website build clean
+        run: npm install puppeteer axios form-data
+
+      - name: Install additional OS dependencies and Chinese fonts for Puppeteer
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libx11-xcb1 libxcomposite1 libxcursor1 libxdamage1 libxi6 libxtst6 libnss3 libcups2 libxss1 libxrandr2 libasound2 libpangocairo-1.0-0 libatk1.0-0 libatk-bridge2.0-0 libgtk-3-0 fonts-noto-cjk fonts-wqy-zenhei
+
+      - name: Run Screenshot Script
+        env:
+          SITE_URL: 'https://luharaadil.github.io/Scrap-and-RN-generation-daily-records/'
+          LINE_CHANNEL_ACCESS_TOKEN: ${{ secrets.LINE_CHANNEL_ACCESS_TOKEN }}
+          LINE_GROUP_ID: ${{ secrets.LINE_GROUP_ID }}
+          IMGBB_API_KEY: ${{ secrets.IMGBB_API_KEY }}
+        run: node scripts/report.cjs

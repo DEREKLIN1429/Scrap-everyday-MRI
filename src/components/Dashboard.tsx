@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { format, subDays } from 'date-fns';
 import { Calendar as CalendarIcon, Loader2, RefreshCw, ImageIcon, Check, Edit2, Save, X } from 'lucide-react';
+import { DateRange } from 'react-day-picker';
 import { Calendar } from '@/src/components/ui/calendar';
 import { toBlob } from 'html-to-image';
 import { Popover, PopoverContent, PopoverTrigger } from '@/src/components/ui/popover';
@@ -8,6 +9,7 @@ import { Button } from '@/src/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/src/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/src/components/ui/table';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/src/components/ui/select';
+import { Input } from '@/src/components/ui/input';
 import { getWebAppUrl } from '@/src/lib/api';
 import { cn } from '@/src/lib/utils';
 import { useData } from '@/src/lib/DataContext';
@@ -19,9 +21,23 @@ export function Dashboard() {
     globalSection: sectionFilter, setGlobalSection: setSectionFilter
   } = useData();
   
-  const [date, setDate] = useState<Date>(subDays(new Date(), 1));
+  const [date, setDate] = useState<DateRange | undefined>({
+    from: subDays(new Date(), 1),
+    to: subDays(new Date(), 1)
+  });
 
   const [materialFilter, setMaterialFilter] = useState('All');
+  const [searchQuery, setSearchQuery] = useState('');
+  const [colFilters, setColFilters] = useState<Record<string, string>>({
+    shift: '',
+    section: '',
+    material: '',
+    materialName: '',
+    machineNo: '',
+    operatorId: '',
+    mainReason: '',
+    reason: ''
+  });
   const [copiedSummary, setCopiedSummary] = useState(false);
   const [copiedScrap, setCopiedScrap] = useState(false);
   
@@ -70,15 +86,20 @@ export function Dashboard() {
     }
   };
 
+  const startDateStr = date?.from ? format(date.from, 'yyyy-MM-dd') : null;
+  const endDateStr = date?.to ? format(date.to, 'yyyy-MM-dd') : startDateStr;
+
   const rawSummary = data?.summaries?.filter((s: any) => {
-    if (s.date !== format(date, 'yyyy-MM-dd')) return false;
-    if (shiftFilter !== 'All' && s.shift !== shiftFilter) return false;
+    if (!startDateStr) return false;
+    if (s.date < startDateStr || s.date > endDateStr!) return false;
+    if (shiftFilter !== 'All' && s.shift?.trim() !== shiftFilter) return false;
     return true;
   }) || [];
   
   const scraps = data?.scraps?.filter((s: any) => {
-    if (s.date !== format(date, 'yyyy-MM-dd')) return false;
-    if (shiftFilter !== 'All' && s.shift !== shiftFilter) return false;
+    if (!startDateStr) return false;
+    if (s.date < startDateStr || s.date > endDateStr!) return false;
+    if (shiftFilter !== 'All' && s.shift?.trim() !== shiftFilter) return false;
     return true;
   }) || [];
   
@@ -111,6 +132,29 @@ export function Dashboard() {
   const filteredScraps = scraps.filter((scrap: any) => {
     if (sectionFilter !== 'All' && scrap.section !== sectionFilter) return false;
     if (materialFilter !== 'All' && scrap.material !== materialFilter) return false;
+    
+    if (colFilters.shift && !scrap.shift?.toLowerCase().includes(colFilters.shift.toLowerCase())) return false;
+    if (colFilters.section && !scrap.section?.toLowerCase().includes(colFilters.section.toLowerCase())) return false;
+    if (colFilters.material && !scrap.material?.toLowerCase().includes(colFilters.material.toLowerCase())) return false;
+    if (colFilters.materialName && !scrap.materialName?.toLowerCase().includes(colFilters.materialName.toLowerCase())) return false;
+    if (colFilters.machineNo && !scrap.machineNo?.toLowerCase().includes(colFilters.machineNo.toLowerCase())) return false;
+    if (colFilters.operatorId && !scrap.operatorId?.toLowerCase().includes(colFilters.operatorId.toLowerCase())) return false;
+    if (colFilters.mainReason && !scrap.mainReason?.toLowerCase().includes(colFilters.mainReason.toLowerCase())) return false;
+    if (colFilters.reason && !scrap.reason?.toLowerCase().includes(colFilters.reason.toLowerCase())) return false;
+
+    if (searchQuery) {
+      const q = searchQuery.toLowerCase();
+      const matches = 
+        scrap.shift?.toLowerCase().includes(q) ||
+        scrap.section?.toLowerCase().includes(q) ||
+        scrap.material?.toLowerCase().includes(q) ||
+        scrap.materialName?.toLowerCase().includes(q) ||
+        scrap.mainReason?.toLowerCase().includes(q) ||
+        scrap.reason?.toLowerCase().includes(q) ||
+        scrap.operatorId?.toLowerCase().includes(q) ||
+        scrap.machineNo?.toLowerCase().includes(q);
+      if (!matches) return false;
+    }
     return true;
   });
 
@@ -139,8 +183,7 @@ export function Dashboard() {
   const getRnScraps = () => {
     return filteredScraps.filter((s: any) => 
       s.material === 'RN' || 
-      s.material === 'Extrusion Rubber' || 
-      (s.material === 'Rubber' && s.section === 'Tire building')
+      s.material === 'Extrusion Rubber'
     );
   };
 
@@ -166,8 +209,7 @@ export function Dashboard() {
 
   const getPlyScraps = () => {
     return filteredScraps.filter((s: any) => 
-      (s.material === 'PLY' || s.material === 'Chafer') &&
-      (s.section === 'Calendering' || s.section === 'Cutting')
+      s.material === 'PLY' || s.material === 'Chafer'
     );
   };
 
@@ -189,8 +231,55 @@ export function Dashboard() {
       .reduce((sum: number, s: any) => sum + Number(s.weight || 0), 0);
   };
 
+  const getRubberScraps = () => {
+    return filteredScraps.filter((s: any) => 
+      s.material === 'Rubber'
+    );
+  };
+
+  const getRubberTotal = () => getRubberScraps().reduce((sum: number, s: any) => sum + Number(s.weight || 0), 0);
+
+  const getRubberSections = () => {
+    const sections = new Set<string>();
+    getRubberScraps().forEach((s: any) => {
+      if (Number(s.weight || 0) > 0 && s.section) {
+        sections.add(s.section);
+      }
+    });
+    return Array.from(sections).sort();
+  };
+
+  const getRubberSectionTotal = (section: string) => {
+    return getRubberScraps()
+      .filter((s: any) => s.section === section)
+      .reduce((sum: number, s: any) => sum + Number(s.weight || 0), 0);
+  };
+
   const displayPlyScrap = getPlyTotal();
-  const displayRubberScrap = getScrapTotal('Rubber');
+  const displayRubberScrap = getRubberTotal();
+
+  const getOtherScraps = () => {
+    return filteredScraps.filter((s: any) => {
+      const isBic = s.material === 'BIC';
+      const isPly = s.material === 'PLY' || s.material === 'Chafer';
+      const isRubber = s.material === 'Rubber';
+      const isRn = s.material === 'RN' || s.material === 'Extrusion Rubber';
+      return !isBic && !isPly && !isRubber && !isRn;
+    });
+  };
+
+  const displayOtherScrap = getOtherScraps().reduce((sum: number, s: any) => sum + Number(s.weight || 0), 0);
+
+  const getOtherCategories = () => {
+    const categories = new Map<string, number>();
+    getOtherScraps().forEach((s: any) => {
+      if (Number(s.weight || 0) > 0) {
+        const key = `${s.material} - ${s.section || 'Unspecified'}`;
+        categories.set(key, (categories.get(key) || 0) + Number(s.weight));
+      }
+    });
+    return Array.from(categories.entries()).sort((a, b) => b[1] - a[1]);
+  };
 
   const calculateRate = (scrap: number, usage: number) => {
     if (!usage || usage === 0) return null;
@@ -290,7 +379,7 @@ export function Dashboard() {
             <SelectContent>
               <SelectItem value="All" className="text-base">All Types</SelectItem>
               <SelectItem value="BIC" className="text-base">BIC (鋼絲)</SelectItem>
-              <SelectItem value="PLY" className="text-base">PLY (簾紗)</SelectItem>
+              <SelectItem value="PLY" className="text-base">PLY/CH (簾紗/柴弗)</SelectItem>
               <SelectItem value="Rubber" className="text-base">Rubber (膠料)</SelectItem>
               <SelectItem value="RN" className="text-base">RN Generation</SelectItem>
               <SelectItem value="Chafer" className="text-base">Chafer (防擦布)</SelectItem>
@@ -299,6 +388,14 @@ export function Dashboard() {
               <SelectItem value="Chemical" className="text-base">Chemical</SelectItem>
             </SelectContent>
           </Select>
+
+          <Input 
+            type="text" 
+            placeholder="Search (reason, machine...)" 
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            className="w-[180px] h-10 text-sm"
+          />
         </div>
 
         <div className="flex items-center gap-2">
@@ -313,20 +410,31 @@ export function Dashboard() {
               <Button
                 variant={"outline"}
                 className={cn(
-                  "w-[240px] justify-start text-left font-normal h-10 font-bold",
+                  "w-[280px] justify-start text-left font-normal h-10 font-bold",
                   !date && "text-muted-foreground"
                 )}
               >
                 <CalendarIcon className="mr-2 h-4 w-4" />
-                {date ? format(date, "PPP") : <span>Pick a date</span>}
+                {date?.from ? (
+                  date.to ? (
+                    <>
+                      {format(date.from, "LLL dd, y")} - {format(date.to, "LLL dd, y")}
+                    </>
+                  ) : (
+                    format(date.from, "LLL dd, y")
+                  )
+                ) : (
+                  <span>Pick a date range</span>
+                )}
               </Button>
             </PopoverTrigger>
             <PopoverContent className="w-auto p-0" align="end">
               <Calendar
-                mode="single"
-                selected={date}
-                onSelect={(d) => d && setDate(d)}
                 initialFocus
+                mode="range"
+                defaultMonth={date?.from}
+                selected={date}
+                onSelect={setDate}
               />
             </PopoverContent>
           </Popover>
@@ -340,7 +448,7 @@ export function Dashboard() {
         <div className="text-red-500 text-sm font-medium">{error}</div>
       )}
 
-      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4" ref={summaryRef}>
+      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-5" ref={summaryRef}>
         <Card>
           <CardHeader className="pb-2">
             <CardTitle className="text-xl">BIC (鋼絲)</CardTitle>
@@ -378,7 +486,7 @@ export function Dashboard() {
 
         <Card>
           <CardHeader className="pb-2">
-            <CardTitle className="text-xl">PLY (簾紗)</CardTitle>
+            <CardTitle className="text-xl">PLY/CH (簾紗/柴弗)</CardTitle>
           </CardHeader>
           <CardContent>
             <div className="space-y-1 text-base">
@@ -431,13 +539,13 @@ export function Dashboard() {
               </div>
               {hasData && (
                 <div className="mt-2 pt-2 border-t border-dashed text-sm space-y-1">
-                  {getMaterialSections('Rubber').map(section => (
+                  {getRubberSections().map(section => (
                     <div key={section} className="flex justify-between text-gray-500">
                       <span className="text-base">{section}:</span>
-                      <span className="text-base">{getSectionScrapTotal('Rubber', section).toFixed(1)} kg</span>
+                      <span className="text-base">{getRubberSectionTotal(section).toFixed(1)} kg</span>
                     </div>
                   ))}
-                  {getMaterialSections('Rubber').length === 0 && (
+                  {getRubberSections().length === 0 && (
                     <div className="text-center text-gray-400 italic">No section data</div>
                   )}
                 </div>
@@ -480,13 +588,42 @@ export function Dashboard() {
             </div>
           </CardContent>
         </Card>
+
+        <Card>
+          <CardHeader className="pb-2">
+            <CardTitle className="text-xl">Other Scraps</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-1 text-base">
+              <div className="flex justify-between items-center mb-2">
+                <span className="text-muted-foreground text-sm">Total:</span>
+                <span className="font-medium text-red-600 text-lg">{formatValue(displayOtherScrap, 'kg')}</span>
+              </div>
+              {hasData && (
+                <div className="mt-2 pt-2 border-t border-dashed text-sm space-y-1 max-h-[120px] overflow-y-auto pr-1">
+                  {getOtherCategories().map(([category, weight]) => (
+                    <div key={category} className="flex justify-between text-gray-500 text-sm">
+                      <span className="truncate mr-2 flex-1" title={category}>{category}:</span>
+                      <span className="whitespace-nowrap font-medium text-gray-700">{weight.toFixed(1)}</span>
+                    </div>
+                  ))}
+                  {getOtherCategories().length === 0 && (
+                    <div className="text-center text-gray-400 italic">No other scrap</div>
+                  )}
+                </div>
+              )}
+            </div>
+          </CardContent>
+        </Card>
       </div>
 
       <Card>
         <CardHeader className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 pb-2">
           <div>
             <CardTitle>Scrap Details</CardTitle>
-            <CardDescription>Detailed list of scrap recorded for {format(date, 'PPP')}</CardDescription>
+            <CardDescription>
+              Detailed list of scrap recorded for {date?.from ? (date.to ? `${format(date.from, 'PPP')} to ${format(date.to, 'PPP')}` : format(date.from, 'PPP')) : 'selected dates'}
+            </CardDescription>
           </div>
           <Button variant="outline" size="sm" onClick={() => copyAsPicture(scrapTableRef, setCopiedScrap)} className="h-9 font-bold">
             {copiedScrap ? <Check className="h-4 w-4 sm:mr-2 text-green-600" /> : <ImageIcon className="h-4 w-4 sm:mr-2" />}
@@ -505,16 +642,98 @@ export function Dashboard() {
               <Table>
                 <TableHeader>
                   <TableRow>
-                    <TableHead>Date</TableHead>
-                    <TableHead>Shift</TableHead>
-                    <TableHead>Section</TableHead>
-                    <TableHead>Material Type</TableHead>
-                    <TableHead>Material Name</TableHead>
-                    <TableHead>Weight (kg)</TableHead>
-                    <TableHead>Main Reason</TableHead>
-                    <TableHead>Reason</TableHead>
-                    <TableHead>Picture</TableHead>
-                    <TableHead>Recorded At</TableHead>
+                    <TableHead className="align-top pt-3">Date</TableHead>
+                    <TableHead className="align-top pt-3 min-w-[100px]">
+                      <div className="flex flex-col gap-1">
+                        <span>Shift</span>
+                        <Input 
+                          placeholder="Filter shift..." 
+                          value={colFilters.shift}
+                          onChange={(e) => setColFilters(f => ({...f, shift: e.target.value}))}
+                          className="h-7 text-xs bg-white font-normal px-2"
+                        />
+                      </div>
+                    </TableHead>
+                    <TableHead className="align-top pt-3 min-w-[120px]">
+                      <div className="flex flex-col gap-1">
+                        <span>Section</span>
+                        <Input 
+                          placeholder="Filter section..." 
+                          value={colFilters.section}
+                          onChange={(e) => setColFilters(f => ({...f, section: e.target.value}))}
+                          className="h-7 text-xs bg-white font-normal px-2"
+                        />
+                      </div>
+                    </TableHead>
+                    <TableHead className="align-top pt-3 min-w-[120px]">
+                      <div className="flex flex-col gap-1">
+                        <span>Material Type</span>
+                        <Input 
+                          placeholder="Filter type..." 
+                          value={colFilters.material}
+                          onChange={(e) => setColFilters(f => ({...f, material: e.target.value}))}
+                          className="h-7 text-xs bg-white font-normal px-2"
+                        />
+                      </div>
+                    </TableHead>
+                    <TableHead className="align-top pt-3 min-w-[120px]">
+                      <div className="flex flex-col gap-1">
+                        <span>Material Name</span>
+                        <Input 
+                          placeholder="Filter name..." 
+                          value={colFilters.materialName}
+                          onChange={(e) => setColFilters(f => ({...f, materialName: e.target.value}))}
+                          className="h-7 text-xs bg-white font-normal px-2"
+                        />
+                      </div>
+                    </TableHead>
+                    <TableHead className="align-top pt-3 min-w-[100px]">
+                      <div className="flex flex-col gap-1">
+                        <span>Machine No</span>
+                        <Input 
+                          placeholder="Filter machine..." 
+                          value={colFilters.machineNo}
+                          onChange={(e) => setColFilters(f => ({...f, machineNo: e.target.value}))}
+                          className="h-7 text-xs bg-white font-normal px-2"
+                        />
+                      </div>
+                    </TableHead>
+                    <TableHead className="align-top pt-3 min-w-[100px]">
+                      <div className="flex flex-col gap-1">
+                        <span>Op. ID</span>
+                        <Input 
+                          placeholder="Filter operator..." 
+                          value={colFilters.operatorId}
+                          onChange={(e) => setColFilters(f => ({...f, operatorId: e.target.value}))}
+                          className="h-7 text-xs bg-white font-normal px-2"
+                        />
+                      </div>
+                    </TableHead>
+                    <TableHead className="align-top pt-3">Weight (kg)</TableHead>
+                    <TableHead className="align-top pt-3 min-w-[120px]">
+                      <div className="flex flex-col gap-1">
+                        <span>Main Reason</span>
+                        <Input 
+                          placeholder="Filter main reason..." 
+                          value={colFilters.mainReason}
+                          onChange={(e) => setColFilters(f => ({...f, mainReason: e.target.value}))}
+                          className="h-7 text-xs bg-white font-normal px-2"
+                        />
+                      </div>
+                    </TableHead>
+                    <TableHead className="align-top pt-3 min-w-[150px]">
+                      <div className="flex flex-col gap-1">
+                        <span>Reason</span>
+                        <Input 
+                          placeholder="Filter reason..." 
+                          value={colFilters.reason}
+                          onChange={(e) => setColFilters(f => ({...f, reason: e.target.value}))}
+                          className="h-7 text-xs bg-white font-normal px-2"
+                        />
+                      </div>
+                    </TableHead>
+                    <TableHead className="align-top pt-3">Picture</TableHead>
+                    <TableHead className="align-top pt-3">Recorded At</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -525,6 +744,8 @@ export function Dashboard() {
                       <TableCell>{scrap.section}</TableCell>
                       <TableCell className="font-medium">{scrap.material}</TableCell>
                       <TableCell>{scrap.materialName || '-'}</TableCell>
+                      <TableCell>{scrap.machineNo || '-'}</TableCell>
+                      <TableCell>{scrap.operatorId || '-'}</TableCell>
                       <TableCell>{typeof scrap.weight === 'number' ? (scrap.weight === 0 ? '0' : scrap.weight.toFixed(1)) : (scrap.weight || '0')}</TableCell>
                       <TableCell>{scrap.mainReason || '-'}</TableCell>
                       <TableCell>
