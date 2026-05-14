@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { format, subDays } from 'date-fns';
-import { Calendar as CalendarIcon, Loader2, RefreshCw, ImageIcon, Check, Edit2, Save, X } from 'lucide-react';
+import { Calendar as CalendarIcon, Loader2, RefreshCw, ImageIcon, Check, Edit2, Save, X, Trash } from 'lucide-react';
 import { DateRange } from 'react-day-picker';
 import { Calendar } from '@/src/components/ui/calendar';
 import { toBlob } from 'html-to-image';
@@ -9,16 +9,21 @@ import { Button } from '@/src/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/src/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/src/components/ui/table';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/src/components/ui/select';
+import { Input } from '@/src/components/ui/input';
 import { getWebAppUrl } from '@/src/lib/api';
 import { cn } from '@/src/lib/utils';
 import { useData } from '@/src/lib/DataContext';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/src/components/ui/dialog';
 
 export function Dashboard() {
   const { 
-    data, loading, error, loadData, updateScrapReasonInSheet,
+    data, loading, error, loadData, updateScrapFullInSheet, deleteScrapFromSheet,
     globalShift: shiftFilter, setGlobalShift: setShiftFilter,
     globalSection: sectionFilter, setGlobalSection: setSectionFilter
   } = useData();
+
+  const user = JSON.parse(localStorage.getItem('mri_auth_user') || 'null');
+  const isAdmin = user?.role === 'Admin';
   
   const [date, setDate] = useState<DateRange | undefined>({
     from: subDays(new Date(), 1),
@@ -26,12 +31,23 @@ export function Dashboard() {
   });
 
   const [materialFilter, setMaterialFilter] = useState('All');
+  const [searchQuery, setSearchQuery] = useState('');
+  const [colFilters, setColFilters] = useState<Record<string, string>>({
+    shift: '',
+    section: '',
+    material: '',
+    materialName: '',
+    machineNo: '',
+    operatorId: '',
+    mainReason: '',
+    reason: ''
+  });
   const [copiedSummary, setCopiedSummary] = useState(false);
   const [copiedScrap, setCopiedScrap] = useState(false);
   
-  const [editingScrap, setEditingScrap] = useState<string | null>(null);
-  const [editReason, setEditReason] = useState('');
+  const [editingScrap, setEditingScrap] = useState<any | null>(null);
   const [isUpdating, setIsUpdating] = useState(false);
+  const [deleteConfirm, setDeleteConfirm] = useState<string | null>(null);
   
   const summaryRef = useRef<HTMLDivElement>(null);
   const scrapTableRef = useRef<HTMLDivElement>(null);
@@ -120,6 +136,29 @@ export function Dashboard() {
   const filteredScraps = scraps.filter((scrap: any) => {
     if (sectionFilter !== 'All' && scrap.section !== sectionFilter) return false;
     if (materialFilter !== 'All' && scrap.material !== materialFilter) return false;
+    
+    if (colFilters.shift && !scrap.shift?.toLowerCase().includes(colFilters.shift.toLowerCase())) return false;
+    if (colFilters.section && !scrap.section?.toLowerCase().includes(colFilters.section.toLowerCase())) return false;
+    if (colFilters.material && !scrap.material?.toLowerCase().includes(colFilters.material.toLowerCase())) return false;
+    if (colFilters.materialName && !scrap.materialName?.toLowerCase().includes(colFilters.materialName.toLowerCase())) return false;
+    if (colFilters.machineNo && !scrap.machineNo?.toLowerCase().includes(colFilters.machineNo.toLowerCase())) return false;
+    if (colFilters.operatorId && !scrap.operatorId?.toLowerCase().includes(colFilters.operatorId.toLowerCase())) return false;
+    if (colFilters.mainReason && !scrap.mainReason?.toLowerCase().includes(colFilters.mainReason.toLowerCase())) return false;
+    if (colFilters.reason && !scrap.reason?.toLowerCase().includes(colFilters.reason.toLowerCase())) return false;
+
+    if (searchQuery) {
+      const q = searchQuery.toLowerCase();
+      const matches = 
+        scrap.shift?.toLowerCase().includes(q) ||
+        scrap.section?.toLowerCase().includes(q) ||
+        scrap.material?.toLowerCase().includes(q) ||
+        scrap.materialName?.toLowerCase().includes(q) ||
+        scrap.mainReason?.toLowerCase().includes(q) ||
+        scrap.reason?.toLowerCase().includes(q) ||
+        scrap.operatorId?.toLowerCase().includes(q) ||
+        scrap.machineNo?.toLowerCase().includes(q);
+      if (!matches) return false;
+    }
     return true;
   });
 
@@ -286,22 +325,33 @@ export function Dashboard() {
     }
   };
 
-  const handleSaveReason = async (timestamp: string) => {
-    if (!timestamp) return;
+  const handleSaveScrap = async () => {
+    if (!editingScrap) return;
     setIsUpdating(true);
     try {
-      await updateScrapReasonInSheet(timestamp, editReason);
+      await updateScrapFullInSheet(editingScrap);
       setEditingScrap(null);
     } catch (err) {
-      alert('Failed to update reason');
+      alert('Failed to update scrap data');
+    } finally {
+      setIsUpdating(false);
+    }
+  };
+  
+  const handleDeleteScrap = async (timestamp: string) => {
+    setIsUpdating(true);
+    try {
+      await deleteScrapFromSheet(timestamp);
+      setDeleteConfirm(null);
+    } catch (err) {
+      alert('Failed to delete scrap data');
     } finally {
       setIsUpdating(false);
     }
   };
 
   const startEditing = (scrap: any) => {
-    setEditingScrap(scrap.timestamp);
-    setEditReason(scrap.reason || '');
+    setEditingScrap({ ...scrap });
   };
 
   return (
@@ -353,6 +403,14 @@ export function Dashboard() {
               <SelectItem value="Chemical" className="text-base">Chemical</SelectItem>
             </SelectContent>
           </Select>
+
+          <Input 
+            type="text" 
+            placeholder="Search (reason, machine...)" 
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            className="w-[180px] h-10 text-sm"
+          />
         </div>
 
         <div className="flex items-center gap-2">
@@ -599,16 +657,99 @@ export function Dashboard() {
               <Table>
                 <TableHeader>
                   <TableRow>
-                    <TableHead>Date</TableHead>
-                    <TableHead>Shift</TableHead>
-                    <TableHead>Section</TableHead>
-                    <TableHead>Material Type</TableHead>
-                    <TableHead>Material Name</TableHead>
-                    <TableHead>Weight (kg)</TableHead>
-                    <TableHead>Main Reason</TableHead>
-                    <TableHead>Reason</TableHead>
-                    <TableHead>Picture</TableHead>
-                    <TableHead>Recorded At</TableHead>
+                    <TableHead className="align-top pt-3">Date</TableHead>
+                    <TableHead className="align-top pt-3 min-w-[100px]">
+                      <div className="flex flex-col gap-1">
+                        <span>Shift</span>
+                        <Input 
+                          placeholder="Filter shift..." 
+                          value={colFilters.shift}
+                          onChange={(e) => setColFilters(f => ({...f, shift: e.target.value}))}
+                          className="h-7 text-xs bg-white font-normal px-2"
+                        />
+                      </div>
+                    </TableHead>
+                    <TableHead className="align-top pt-3 min-w-[120px]">
+                      <div className="flex flex-col gap-1">
+                        <span>Section</span>
+                        <Input 
+                          placeholder="Filter section..." 
+                          value={colFilters.section}
+                          onChange={(e) => setColFilters(f => ({...f, section: e.target.value}))}
+                          className="h-7 text-xs bg-white font-normal px-2"
+                        />
+                      </div>
+                    </TableHead>
+                    <TableHead className="align-top pt-3 min-w-[120px]">
+                      <div className="flex flex-col gap-1">
+                        <span>Material Type</span>
+                        <Input 
+                          placeholder="Filter type..." 
+                          value={colFilters.material}
+                          onChange={(e) => setColFilters(f => ({...f, material: e.target.value}))}
+                          className="h-7 text-xs bg-white font-normal px-2"
+                        />
+                      </div>
+                    </TableHead>
+                    <TableHead className="align-top pt-3 min-w-[120px]">
+                      <div className="flex flex-col gap-1">
+                        <span>Material Name</span>
+                        <Input 
+                          placeholder="Filter name..." 
+                          value={colFilters.materialName}
+                          onChange={(e) => setColFilters(f => ({...f, materialName: e.target.value}))}
+                          className="h-7 text-xs bg-white font-normal px-2"
+                        />
+                      </div>
+                    </TableHead>
+                    <TableHead className="align-top pt-3 min-w-[100px]">
+                      <div className="flex flex-col gap-1">
+                        <span>Machine No</span>
+                        <Input 
+                          placeholder="Filter machine..." 
+                          value={colFilters.machineNo}
+                          onChange={(e) => setColFilters(f => ({...f, machineNo: e.target.value}))}
+                          className="h-7 text-xs bg-white font-normal px-2"
+                        />
+                      </div>
+                    </TableHead>
+                    <TableHead className="align-top pt-3 min-w-[100px]">
+                      <div className="flex flex-col gap-1">
+                        <span>Op. ID</span>
+                        <Input 
+                          placeholder="Filter operator..." 
+                          value={colFilters.operatorId}
+                          onChange={(e) => setColFilters(f => ({...f, operatorId: e.target.value}))}
+                          className="h-7 text-xs bg-white font-normal px-2"
+                        />
+                      </div>
+                    </TableHead>
+                    <TableHead className="align-top pt-3">Weight (kg)</TableHead>
+                    <TableHead className="align-top pt-3 min-w-[120px]">
+                      <div className="flex flex-col gap-1">
+                        <span>Main Reason</span>
+                        <Input 
+                          placeholder="Filter main reason..." 
+                          value={colFilters.mainReason}
+                          onChange={(e) => setColFilters(f => ({...f, mainReason: e.target.value}))}
+                          className="h-7 text-xs bg-white font-normal px-2"
+                        />
+                      </div>
+                    </TableHead>
+                    <TableHead className="align-top pt-3 min-w-[150px]">
+                      <div className="flex flex-col gap-1">
+                        <span>Reason</span>
+                        <Input 
+                          placeholder="Filter reason..." 
+                          value={colFilters.reason}
+                          onChange={(e) => setColFilters(f => ({...f, reason: e.target.value}))}
+                          className="h-7 text-xs bg-white font-normal px-2"
+                        />
+                      </div>
+                    </TableHead>
+                    <TableHead className="align-top pt-3">Picture</TableHead>
+                    <TableHead className="align-top pt-3">Recorded At</TableHead>
+                    <TableHead className="align-top pt-3">Actions</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -619,51 +760,11 @@ export function Dashboard() {
                       <TableCell>{scrap.section}</TableCell>
                       <TableCell className="font-medium">{scrap.material}</TableCell>
                       <TableCell>{scrap.materialName || '-'}</TableCell>
+                      <TableCell>{scrap.machineNo || '-'}</TableCell>
+                      <TableCell>{scrap.operatorId || '-'}</TableCell>
                       <TableCell>{typeof scrap.weight === 'number' ? (scrap.weight === 0 ? '0' : scrap.weight.toFixed(1)) : (scrap.weight || '0')}</TableCell>
                       <TableCell>{scrap.mainReason || '-'}</TableCell>
-                      <TableCell>
-                        {editingScrap === scrap.timestamp ? (
-                          <div className="flex items-center gap-2">
-                            <input 
-                              type="text" 
-                              className="border rounded px-2 py-1 text-sm flex-1"
-                              value={editReason}
-                              onChange={(e) => setEditReason(e.target.value)}
-                              autoFocus
-                            />
-                            <Button 
-                              variant="ghost" 
-                              size="icon" 
-                              className="h-8 w-8 text-green-600"
-                              onClick={() => handleSaveReason(scrap.timestamp)}
-                              disabled={isUpdating}
-                            >
-                              {isUpdating ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
-                            </Button>
-                            <Button 
-                              variant="ghost" 
-                              size="icon" 
-                              className="h-8 w-8 text-red-600"
-                              onClick={() => setEditingScrap(null)}
-                              disabled={isUpdating}
-                            >
-                              <X className="h-4 w-4" />
-                            </Button>
-                          </div>
-                        ) : (
-                          <div className="flex items-center justify-between group">
-                            <span>{scrap.reason}</span>
-                            <Button 
-                              variant="ghost" 
-                              size="icon" 
-                              className="h-6 w-6 opacity-0 group-hover:opacity-100 transition-opacity"
-                              onClick={() => startEditing(scrap)}
-                            >
-                              <Edit2 className="h-3 w-3" />
-                            </Button>
-                          </div>
-                        )}
-                      </TableCell>
+                      <TableCell>{scrap.reason}</TableCell>
                       <TableCell>
                         {scrap.imageUrl ? (
                           <a href={scrap.imageUrl} target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline">
@@ -673,7 +774,34 @@ export function Dashboard() {
                           <span className="text-muted-foreground text-sm">No image</span>
                         )}
                       </TableCell>
-                      <TableCell className="text-muted-foreground whitespace-nowrap">{formatToIST(scrap.timestamp || scrap.time || '-')}</TableCell>
+                      <TableCell className="text-muted-foreground whitespace-nowrap text-xs flex flex-col gap-1">
+                        <span>{formatToIST(scrap.timestamp || scrap.time || '-')}</span>
+                        {scrap.addedBy && <span className="text-[10px] text-gray-500">By: {scrap.addedBy}</span>}
+                      </TableCell>
+                      <TableCell>
+                        <div className="flex items-center gap-2">
+                          <Button 
+                            variant="ghost" 
+                            size="icon" 
+                            className="h-8 w-8 text-blue-600 hover:bg-blue-50 hover:text-blue-700"
+                            onClick={() => startEditing(scrap)}
+                            title="Edit"
+                          >
+                            <Edit2 className="h-4 w-4" />
+                          </Button>
+                          {isAdmin && (
+                            <Button 
+                              variant="ghost" 
+                              size="icon" 
+                              className="h-8 w-8 text-red-600 hover:bg-red-50 hover:text-red-700"
+                              onClick={() => setDeleteConfirm(scrap.timestamp)}
+                              title="Delete"
+                            >
+                              <Trash className="h-4 w-4" />
+                            </Button>
+                          )}
+                        </div>
+                      </TableCell>
                     </TableRow>
                   ))}
                 </TableBody>
@@ -682,6 +810,87 @@ export function Dashboard() {
           )}
         </CardContent>
       </Card>
+
+      <Dialog open={!!editingScrap} onOpenChange={(open) => !open && setEditingScrap(null)}>
+        <DialogContent className="sm:max-w-[425px]">
+          <DialogHeader>
+            <DialogTitle>Edit Scrap Entry</DialogTitle>
+          </DialogHeader>
+          {editingScrap && (
+            <div className="grid gap-4 py-4">
+              <div className="grid grid-cols-4 items-center gap-4">
+                <label className="text-right text-sm font-medium">Machine No</label>
+                <Input 
+                  className="col-span-3" 
+                  value={editingScrap.machineNo || ''}
+                  onChange={(e) => setEditingScrap({ ...editingScrap, machineNo: e.target.value })}
+                />
+              </div>
+              <div className="grid grid-cols-4 items-center gap-4">
+                <label className="text-right text-sm font-medium">Operator ID</label>
+                <Input 
+                  className="col-span-3" 
+                  value={editingScrap.operatorId || ''}
+                  onChange={(e) => setEditingScrap({ ...editingScrap, operatorId: e.target.value })}
+                />
+              </div>
+              <div className="grid grid-cols-4 items-center gap-4">
+                <label className="text-right text-sm font-medium">Main Reason</label>
+                <Input 
+                  className="col-span-3" 
+                  value={editingScrap.mainReason || ''}
+                  onChange={(e) => setEditingScrap({ ...editingScrap, mainReason: e.target.value })}
+                />
+              </div>
+              <div className="grid grid-cols-4 items-center gap-4">
+                <label className="text-right text-sm font-medium">Reason</label>
+                <Input 
+                  className="col-span-3" 
+                  value={editingScrap.reason || ''}
+                  onChange={(e) => setEditingScrap({ ...editingScrap, reason: e.target.value })}
+                />
+              </div>
+              {isAdmin && (
+                <div className="grid grid-cols-4 items-center gap-4">
+                  <label className="text-right text-sm font-medium text-red-600">Weight (KG)</label>
+                  <Input 
+                    type="number"
+                    step="0.01"
+                    className="col-span-3 border-red-200 focus-visible:ring-red-500" 
+                    value={editingScrap.weight || ''}
+                    onChange={(e) => setEditingScrap({ ...editingScrap, weight: e.target.value })}
+                  />
+                </div>
+              )}
+            </div>
+          )}
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setEditingScrap(null)} disabled={isUpdating}>Cancel</Button>
+            <Button onClick={handleSaveScrap} disabled={isUpdating}>
+              {isUpdating && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+              Save changes
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={!!deleteConfirm} onOpenChange={(open) => !open && setDeleteConfirm(null)}>
+        <DialogContent className="sm:max-w-[425px]">
+          <DialogHeader>
+            <DialogTitle>Confirm Deletion</DialogTitle>
+          </DialogHeader>
+          <div className="py-4">
+            <p>Are you sure you want to delete this scrap entry? This action cannot be undone.</p>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setDeleteConfirm(null)} disabled={isUpdating}>Cancel</Button>
+            <Button variant="destructive" onClick={() => deleteConfirm && handleDeleteScrap(deleteConfirm)} disabled={isUpdating}>
+              {isUpdating && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+              Delete
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

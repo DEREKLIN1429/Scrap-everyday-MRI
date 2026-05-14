@@ -16,7 +16,7 @@ import { useData } from '@/src/lib/DataContext';
 
 export function MainReport() {
   const { 
-    data, targets, configs, loading, error, loadData, loadTargets, updateTargets, saveTargetsToSheet, updateScrapReasonInSheet, isSyncingTargets,
+    data, targets, loading, error, loadData, loadTargets, updateTargets, saveTargetsToSheet, updateScrapReasonInSheet, isSyncingTargets,
     globalDateRange: date, setGlobalDateRange: setDate,
     selectedWeek, setSelectedWeek,
     numWeeks, setNumWeeks
@@ -34,14 +34,14 @@ export function MainReport() {
   const [highlightedRows, setHighlightedRows] = useState<number[]>([]);
   const [modalCopied, setModalCopied] = useState(false);
   const [isEditingFont, setIsEditingFont] = useState(false);
+  const user = JSON.parse(localStorage.getItem('mri_auth_user') || 'null');
+  const isAdmin = user?.role === 'Admin';
+  
   const [rowFontSizes, setRowFontSizes] = useState<Record<string, number>>(() => {
     const saved = localStorage.getItem('mri_row_font_sizes');
     return saved ? JSON.parse(saved) : {};
   });
   const [isEditingTargets, setIsEditingTargets] = useState(false);
-  const [isLoggedIn, setIsLoggedIn] = useState(false);
-  const [loginForm, setLoginForm] = useState({ id: '', password: '' });
-  const [loginError, setLoginError] = useState('');
   const [totalMode, setTotalMode] = useState<'MONTHLY' | 'SELECTED'>('SELECTED');
   const tableRef = useRef<HTMLDivElement>(null);
   const scrapModalRef = useRef<HTMLDivElement>(null);
@@ -490,33 +490,15 @@ export function MainReport() {
   };
 
   useEffect(() => {
-    if (isEditingTargets && configs.length === 0 && !isSyncingTargets) {
+    if (isEditingTargets && !isSyncingTargets) {
       loadTargets();
     }
-  }, [isEditingTargets, configs, isSyncingTargets, loadTargets]);
-
-  const handleLogin = () => {
-    if (configs.length === 0) {
-      setLoginError('Configuration could not be loaded from Google Sheets. Please ensure the backend script is updated to return ID and Password.');
-      return;
-    }
-    
-    const matched = configs.find(c => c.id === loginForm.id && c.password === loginForm.password);
-    
-    if (matched) {
-      setIsLoggedIn(true);
-      setLoginError('');
-    } else {
-      setLoginError('Invalid ID or Password');
-    }
-  };
+  }, [isEditingTargets, isSyncingTargets, loadTargets]);
 
   const handleSaveTargets = async () => {
     try {
       await saveTargetsToSheet(targets);
       setIsEditingTargets(false);
-      setIsLoggedIn(false);
-      setLoginForm({ id: '', password: '' });
     } catch (err) {
       alert('Failed to save targets to Google Sheet');
     }
@@ -660,12 +642,13 @@ export function MainReport() {
       )}
 
       <Card className="overflow-hidden">
-        <div ref={tableRef} className="bg-white">
+        <div id="mri-report-table" ref={tableRef} className="bg-white">
           <CardHeader className="flex flex-row items-center justify-between pb-2 relative">
             <div className="flex-1" />
             <CardTitle className="text-2xl text-center flex-1 whitespace-nowrap">2026 MRI Production Weekly Report</CardTitle>
-            <div className="flex items-center gap-2 flex-1 justify-end flex-wrap">
-              <div className="flex items-center gap-2">
+            {!new URLSearchParams(window.location.search).get('bot') ? (
+              <div className="flex items-center gap-2 flex-1 justify-end flex-wrap">
+                <div className="flex items-center gap-2">
                 <Select value={selectedWeek.toString()} onValueChange={(v) => setSelectedWeek(parseInt(v))}>
                   <SelectTrigger className="w-[120px] h-10 font-bold">
                     <SelectValue placeholder="Select Week" />
@@ -721,16 +704,21 @@ export function MainReport() {
                   />
                 </PopoverContent>
               </Popover>
-              <Button 
-                variant="ghost" 
-                size="sm" 
-                className="h-8 w-8 p-0" 
-                onClick={() => setIsEditingTargets(true)}
-                title="Target Settings"
-              >
-                <Plus className="h-4 w-4" />
-              </Button>
+              {isAdmin && (
+                <Button 
+                  variant="ghost" 
+                  size="sm" 
+                  className="h-8 w-8 p-0" 
+                  onClick={() => setIsEditingTargets(true)}
+                  title="Target Settings"
+                >
+                  <Plus className="h-4 w-4" />
+                </Button>
+              )}
             </div>
+            ) : (
+              <div className="flex-1" />
+            )}
           </CardHeader>
           <CardContent className="p-0 overflow-x-auto">
             <div className="p-4">
@@ -893,7 +881,7 @@ export function MainReport() {
                 <Table className="border">
                   <TableHeader>
                     <TableRow>
-                      {['Date', 'Shift', 'Section', 'Material Type', 'Material Name', 'Weight (kg)', 'Main Reason', 'Reason', 'Picture', 'Recorded At'].map((head, idx) => (
+                      {['Date', 'Shift', 'Section', 'Material Type', 'Material Name', 'Machine No', 'Op. ID', 'Weight (kg)', 'Main Reason', 'Reason', 'Picture', 'Recorded At'].map((head, idx) => (
                         <TableHead 
                           key={idx} 
                           className={cn("cursor-pointer hover:bg-gray-100 transition-colors", highlightedCols.includes(idx) && "bg-yellow-100 text-yellow-900 font-bold")}
@@ -916,11 +904,13 @@ export function MainReport() {
                         <TableCell className={cn(highlightedCols.includes(2) && "bg-yellow-50")}>{scrap.section}</TableCell>
                         <TableCell className={cn("font-medium", highlightedCols.includes(3) && "bg-yellow-50")}>{scrap.material}</TableCell>
                         <TableCell className={cn(highlightedCols.includes(4) && "bg-yellow-50")}>{scrap.materialName || '-'}</TableCell>
-                        <TableCell className={cn(highlightedCols.includes(5) && "bg-yellow-50")}>{typeof scrap.weight === 'number' ? (scrap.weight === 0 ? '0' : scrap.weight.toFixed(1)) : (scrap.weight || '0')}</TableCell>
-                        <TableCell className={cn(highlightedCols.includes(6) && "bg-yellow-50")}>
+                        <TableCell className={cn(highlightedCols.includes(5) && "bg-yellow-50")}>{scrap.machineNo || '-'}</TableCell>
+                        <TableCell className={cn(highlightedCols.includes(6) && "bg-yellow-50")}>{scrap.operatorId || '-'}</TableCell>
+                        <TableCell className={cn(highlightedCols.includes(7) && "bg-yellow-50")}>{typeof scrap.weight === 'number' ? (scrap.weight === 0 ? '0' : scrap.weight.toFixed(1)) : (scrap.weight || '0')}</TableCell>
+                        <TableCell className={cn(highlightedCols.includes(8) && "bg-yellow-50")}>
                           {scrap.mainReason || '-'}
                         </TableCell>
-                        <TableCell className={cn(highlightedCols.includes(7) && "bg-yellow-50")}>
+                        <TableCell className={cn(highlightedCols.includes(9) && "bg-yellow-50")}>
                           {editingScrap === scrap.timestamp ? (
                             <div className="flex items-center gap-2">
                               <input 
@@ -963,7 +953,7 @@ export function MainReport() {
                             </div>
                           )}
                         </TableCell>
-                        <TableCell className={cn(highlightedCols.includes(8) && "bg-yellow-50")}>
+                        <TableCell className={cn(highlightedCols.includes(10) && "bg-yellow-50")}>
                           {scrap.imageUrl ? (
                             <a href={scrap.imageUrl} target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline">
                               View Image
@@ -972,7 +962,7 @@ export function MainReport() {
                             <span className="text-muted-foreground text-sm">No image</span>
                           )}
                         </TableCell>
-                        <TableCell className={cn("text-muted-foreground whitespace-nowrap", highlightedCols.includes(9) && "bg-yellow-50")}>{formatToIST(scrap.timestamp || scrap.time || '-')}</TableCell>
+                        <TableCell className={cn("text-muted-foreground whitespace-nowrap", highlightedCols.includes(11) && "bg-yellow-50")}>{formatToIST(scrap.timestamp || scrap.time || '-')}</TableCell>
                       </TableRow>
                     ))}
                   </TableBody>
@@ -1193,106 +1183,59 @@ export function MainReport() {
                   <RefreshCw className="h-4 w-4" />
                 </Button>
               </div>
-              <Button variant="ghost" size="icon" onClick={() => { setIsEditingTargets(false); setIsLoggedIn(false); setLoginForm({ id: '', password: '' }); }}>
+              <Button variant="ghost" size="icon" onClick={() => setIsEditingTargets(false)}>
                 <X className="h-4 w-4" />
               </Button>
             </div>
             
-            {!isLoggedIn ? (
-              <div className="p-6 space-y-4">
-                {isSyncingTargets && configs.length === 0 ? (
-                  <div className="flex flex-col items-center justify-center py-8 space-y-3">
-                    <Loader2 className="h-8 w-8 animate-spin text-primary" />
-                    <p className="text-sm text-muted-foreground">Syncing configuration...</p>
-                  </div>
-                ) : (
-                  <>
-                    <div className="space-y-2">
-                      <label className="text-sm font-medium">Admin ID</label>
-                      <input 
-                        type="text" 
-                        className="w-full border rounded px-3 py-2"
-                        value={loginForm.id}
-                        onChange={(e) => setLoginForm(prev => ({ ...prev, id: e.target.value }))}
-                        placeholder="Enter ID"
-                        disabled={isSyncingTargets}
-                      />
-                    </div>
-                    <div className="space-y-2">
-                      <label className="text-sm font-medium">Password</label>
-                      <input 
-                        type="password" 
-                        className="w-full border rounded px-3 py-2"
-                        value={loginForm.password}
-                        onChange={(e) => setLoginForm(prev => ({ ...prev, password: e.target.value }))}
-                        placeholder="Enter Password"
-                        disabled={isSyncingTargets}
-                        onKeyDown={(e) => e.key === 'Enter' && handleLogin()}
-                      />
-                    </div>
-                    {loginError && <p className="text-red-500 text-xs font-medium">{loginError}</p>}
-                    <Button className="w-full" onClick={handleLogin} disabled={isSyncingTargets}>
-                      {isSyncingTargets ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}
-                      Login
-                    </Button>
-                  </>
-                )}
-              </div>
-            ) : (
-              <>
-                <div className="p-4 space-y-4 overflow-y-auto max-h-[60vh]">
-                  {(Object.keys(targets) as Array<keyof typeof targets>).map((key) => {
-                    const target = targets[key];
-                    return (
-                      <div key={key} className="space-y-2 border-b pb-3 last:border-0">
-                        <label className="text-sm font-bold capitalize">{(key as string).replace('_', ' ')}</label>
-                        <div className="flex gap-2">
-                          <div className="flex-1">
-                            <label className="text-[10px] text-gray-500 uppercase">Target Value</label>
-                            <input 
-                              type="number" 
-                              step="0.01"
-                              className="w-full border rounded px-2 py-1 text-sm"
-                              value={target.value}
-                              onChange={(e) => updateTargets({
-                                ...targets,
-                                [key]: { ...targets[key], value: parseFloat(e.target.value) || 0 }
-                              })}
-                            />
-                          </div>
-                          <div className="w-32">
-                            <label className="text-[10px] text-gray-500 uppercase">Period</label>
-                            <select 
-                              className="w-full border rounded px-2 py-1 text-sm"
-                              value={target.period}
-                              onChange={(e) => updateTargets({
-                                ...targets,
-                                [key]: { ...targets[key], period: e.target.value as any }
-                              })}
-                            >
-                              <option value="daily">Daily</option>
-                              <option value="weekly">Weekly</option>
-                              <option value="monthly">Monthly</option>
-                              <option value="not_use">Not use</option>
-                            </select>
-                          </div>
-                        </div>
+            <div className="p-4 space-y-4 overflow-y-auto max-h-[60vh]">
+              {(Object.keys(targets) as Array<keyof typeof targets>).map((key) => {
+                const target = targets[key];
+                return (
+                  <div key={key} className="space-y-2 border-b pb-3 last:border-0">
+                    <label className="text-sm font-bold capitalize">{(key as string).replace('_', ' ')}</label>
+                    <div className="flex gap-2">
+                      <div className="flex-1">
+                        <label className="text-[10px] text-gray-500 uppercase">Target Value</label>
+                        <input 
+                          type="number" 
+                          step="0.01"
+                          className="w-full border rounded px-2 py-1 text-sm"
+                          value={target.value}
+                          onChange={(e) => updateTargets({
+                            ...targets,
+                            [key]: { ...targets[key], value: parseFloat(e.target.value) || 0 }
+                          })}
+                        />
                       </div>
-                    );
-                  })}
-                </div>
-                <div className="p-4 border-t bg-gray-50 flex justify-between gap-2">
-                  <Button variant="outline" onClick={() => setIsLoggedIn(false)}>Logout</Button>
-                  <div className="flex gap-2">
-                    <Button variant="ghost" onClick={() => setIsEditingTargets(false)}>Cancel</Button>
-                    <Button onClick={handleSaveTargets} disabled={isSyncingTargets}>
-                      {isSyncingTargets ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <Save className="h-4 w-4 mr-2" />}
-                      Save to Sheet
-                    </Button>
+                      <div className="w-32">
+                        <label className="text-[10px] text-gray-500 uppercase">Period</label>
+                        <select 
+                          className="w-full border rounded px-2 py-1 text-sm"
+                          value={target.period}
+                          onChange={(e) => updateTargets({
+                            ...targets,
+                            [key]: { ...targets[key], period: e.target.value as any }
+                          })}
+                        >
+                          <option value="daily">Daily</option>
+                          <option value="weekly">Weekly</option>
+                          <option value="monthly">Monthly</option>
+                          <option value="not_use">Not use</option>
+                        </select>
+                      </div>
+                    </div>
                   </div>
-                </div>
-              </>
-            )}
+                );
+              })}
+            </div>
+            <div className="p-4 border-t bg-gray-50 flex justify-end gap-2">
+              <Button variant="ghost" onClick={() => setIsEditingTargets(false)}>Cancel</Button>
+              <Button onClick={handleSaveTargets} disabled={isSyncingTargets}>
+                {isSyncingTargets ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <Save className="h-4 w-4 mr-2" />}
+                Save to Sheet
+              </Button>
+            </div>
           </div>
         </div>
       )}

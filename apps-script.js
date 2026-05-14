@@ -56,9 +56,44 @@ function doPost(e) {
         data.mainReason,   // G: Main Reason
         data.reason,       // H: Reason Detail
         imageUrl,          // I: Picture
-        data.timestamp     // J: Timestamp
+        data.timestamp,    // J: Timestamp
+        data.machineNo,    // K: Machine No
+        data.operatorId,   // L: Operator Id
+        data.addedBy       // M: Added By User ID
       ]);
       
+      return ContentService.createTextOutput(JSON.stringify({success: true})).setMimeType(ContentService.MimeType.JSON);
+
+    } else if (action === 'deleteScrap') {
+      var sheet = ss.getSheetByName('ScrapDetails');
+      if (!sheet) return ContentService.createTextOutput(JSON.stringify({error: 'ScrapDetails sheet not found'})).setMimeType(ContentService.MimeType.JSON);
+      
+      var dataRange = sheet.getDataRange();
+      var values = dataRange.getValues();
+      for (var i = 1; i < values.length; i++) {
+        if (values[i][9] == data.timestamp) { // Assuming timestamp is in column J (index 9)
+          sheet.deleteRow(i + 1);
+          break;
+        }
+      }
+      return ContentService.createTextOutput(JSON.stringify({success: true})).setMimeType(ContentService.MimeType.JSON);
+      
+    } else if (action === 'updateScrapFull') {
+      var sheet = ss.getSheetByName('ScrapDetails');
+      if (!sheet) return ContentService.createTextOutput(JSON.stringify({error: 'ScrapDetails sheet not found'})).setMimeType(ContentService.MimeType.JSON);
+      
+      var dataRange = sheet.getDataRange();
+      var values = dataRange.getValues();
+      for (var i = 1; i < values.length; i++) {
+        if (values[i][9] == data.timestamp) { 
+          if (data.weight !== undefined) sheet.getRange(i + 1, 6).setValue(data.weight);
+          if (data.mainReason !== undefined) sheet.getRange(i + 1, 7).setValue(data.mainReason);
+          if (data.reason !== undefined) sheet.getRange(i + 1, 8).setValue(data.reason);
+          if (data.machineNo !== undefined) sheet.getRange(i + 1, 11).setValue(data.machineNo);
+          if (data.operatorId !== undefined) sheet.getRange(i + 1, 12).setValue(data.operatorId);
+          break;
+        }
+      }
       return ContentService.createTextOutput(JSON.stringify({success: true})).setMimeType(ContentService.MimeType.JSON);
 
     } else if (action === 'updateScrapReason') {
@@ -88,6 +123,14 @@ function doPost(e) {
       for (var key in targets) {
         sheet.appendRow([key, targets[key].value, targets[key].period]);
       }
+      return ContentService.createTextOutput(JSON.stringify({success: true})).setMimeType(ContentService.MimeType.JSON);
+    } else if (action === 'saveUser') {
+      var sheet = ss.getSheetByName('Users');
+      if (!sheet) {
+        sheet = ss.insertSheet('Users');
+        sheet.appendRow(['ID', 'Password', 'Role']);
+      }
+      sheet.appendRow([data.userId, data.password, data.role || 'User']);
       return ContentService.createTextOutput(JSON.stringify({success: true})).setMimeType(ContentService.MimeType.JSON);
     }
     
@@ -145,7 +188,10 @@ function doGet(e) {
             mainReason: scData[i][6],
             reason: scData[i][7],
             imageUrl: scData[i][8],
-            timestamp: scData[i][9]
+            timestamp: scData[i][9],
+            machineNo: scData[i][10] || '',
+            operatorId: scData[i][11] || '',
+            addedBy: scData[i][12] || ''
           });
         }
       }
@@ -170,6 +216,16 @@ function doGet(e) {
       }
     }
     return ContentService.createTextOutput(JSON.stringify({ targets: targets })).setMimeType(ContentService.MimeType.JSON);
+  } else if (action === 'getUsers') {
+    var users = [];
+    var sheet = ss.getSheetByName('Users');
+    if (sheet) {
+      var uData = sheet.getDataRange().getValues();
+      for (var j = 1; j < uData.length; j++) {
+        users.push({ id: String(uData[j][0]), password: String(uData[j][1]), role: String(uData[j][2]) });
+      }
+    }
+    return ContentService.createTextOutput(JSON.stringify({ users: users })).setMimeType(ContentService.MimeType.JSON);
   }
   
   return ContentService.createTextOutput(JSON.stringify({error: 'Unknown GET action: ' + action})).setMimeType(ContentService.MimeType.JSON);
