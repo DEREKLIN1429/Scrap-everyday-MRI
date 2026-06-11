@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
-import { format, startOfWeek, endOfWeek, eachDayOfInterval, getDate, getDay, startOfMonth, startOfYear, isSameMonth, isSameWeek } from 'date-fns';
-import { Calendar as CalendarIcon, Loader2, RefreshCw, Copy, Image as ImageIcon, Check, X, Type, Plus, Minus, Save, Edit2 } from 'lucide-react';
+import { format, startOfWeek, endOfWeek, eachDayOfInterval, getDate, getDay, startOfMonth, startOfYear, isSameMonth, isSameWeek, subDays, addDays } from 'date-fns';
+import { Calendar as CalendarIcon, Loader2, RefreshCw, Copy, Image as ImageIcon, Check, X, Type, Plus, Minus, Save, Edit2, ChevronLeft, ChevronRight } from 'lucide-react';
 import { toBlob } from 'html-to-image';
 import { Calendar } from '@/src/components/ui/calendar';
 import { Popover, PopoverContent, PopoverTrigger } from '@/src/components/ui/popover';
@@ -57,6 +57,20 @@ export function MainReport() {
       ...prev,
       [rowId]: Math.max(8, (prev[rowId] || 17) + delta)
     }));
+  };
+
+  const handlePrevDay = () => {
+    if (!date || !date.from) return;
+    const newFrom = subDays(date.from, 1);
+    const newTo = date.to ? subDays(date.to, 1) : newFrom;
+    setDate({ from: newFrom, to: newTo });
+  };
+
+  const handleNextDay = () => {
+    if (!date || !date.from) return;
+    const newFrom = addDays(date.from, 1);
+    const newTo = date.to ? addDays(date.to, 1) : newFrom;
+    setDate({ from: newFrom, to: newTo });
   };
 
   useEffect(() => {
@@ -639,12 +653,10 @@ export function MainReport() {
 
       <Card className="overflow-hidden">
         <div id="mri-report-table" ref={tableRef} className="bg-white">
-          <CardHeader className="flex flex-row items-center justify-between pb-2 relative">
-            <div className="flex-1" />
-            <CardTitle className="text-2xl text-center flex-1 whitespace-nowrap">2026 MRI Production Weekly Report</CardTitle>
+          <CardHeader className="flex flex-col md:flex-row items-center justify-between pb-2 gap-4">
+            <CardTitle className="text-2xl font-bold whitespace-nowrap">2026 MRI Production Weekly Report</CardTitle>
             {!new URLSearchParams(window.location.search).get('bot') ? (
-              <div className="flex items-center gap-2 flex-1 justify-end flex-wrap">
-                <div className="flex items-center gap-2">
+              <div className="flex flex-wrap items-center gap-2 justify-end">
                 <Select value={selectedWeek.toString()} onValueChange={(v) => setSelectedWeek(parseInt(v))}>
                   <SelectTrigger className="w-[120px] h-10 font-bold">
                     <SelectValue placeholder="Select Week" />
@@ -670,51 +682,70 @@ export function MainReport() {
                     ))}
                   </SelectContent>
                 </Select>
-              </div>
 
-              <Popover>
-                <PopoverTrigger asChild>
-                  <Button variant="outline" size="sm" className="h-10 font-bold">
-                    <CalendarIcon className="mr-2 h-4 w-4" />
-                    {date?.from ? (
-                      date.to ? (
-                        <>
-                          {format(date.from, "LLL dd, y")} - {format(date.to, "LLL dd, y")}
-                        </>
-                      ) : (
-                        format(date.from, "LLL dd, y")
-                      )
-                    ) : (
-                      <span>Pick a date range</span>
-                    )}
-                  </Button>
-                </PopoverTrigger>
-                <PopoverContent className="w-auto p-0" align="end">
-                  <Calendar
-                    initialFocus
-                    mode="range"
-                    defaultMonth={date?.from}
-                    selected={date}
-                    onSelect={setDate}
-                    numberOfMonths={1}
-                  />
-                </PopoverContent>
-              </Popover>
-              {isAdmin && (
-                <Button 
-                  variant="ghost" 
-                  size="sm" 
-                  className="h-8 w-8 p-0" 
-                  onClick={() => setIsEditingTargets(true)}
-                  title="Target Settings"
+                <Button
+                  variant="outline"
+                  size="icon"
+                  onClick={handlePrevDay}
+                  className="h-10 w-10 font-bold shrink-0"
+                  title="Previous Day"
+                  id="report-prev-day-btn"
                 >
-                  <Plus className="h-4 w-4" />
+                  <ChevronLeft className="h-4 w-4" />
                 </Button>
-              )}
-            </div>
-            ) : (
-              <div className="flex-1" />
-            )}
+                <Popover>
+                  <PopoverTrigger asChild>
+                    <Button variant="outline" size="sm" className="h-10 font-bold max-w-[240px] shrink-0">
+                      <CalendarIcon className="mr-2 h-4 w-4 shrink-0" />
+                      <span className="truncate">
+                        {date?.from ? (
+                          date.to ? (
+                            <>
+                              {format(date.from, "LLL dd, y")} - {format(date.to, "LLL dd, y")}
+                            </>
+                          ) : (
+                            format(date.from, "LLL dd, y")
+                          )
+                        ) : (
+                          <span>Pick a date range</span>
+                        )}
+                      </span>
+                    </Button>
+                  </PopoverTrigger>
+                  <PopoverContent className="w-auto p-0" align="end">
+                    <Calendar
+                      initialFocus
+                      mode="range"
+                      defaultMonth={date?.from}
+                      selected={date}
+                      onSelect={setDate}
+                      numberOfMonths={1}
+                    />
+                  </PopoverContent>
+                </Popover>
+                <Button
+                  variant="outline"
+                  size="icon"
+                  onClick={handleNextDay}
+                  className="h-10 w-10 font-bold shrink-0"
+                  title="Next Day"
+                  id="report-next-day-btn"
+                >
+                  <ChevronRight className="h-4 w-4" />
+                </Button>
+                {isAdmin && (
+                  <Button 
+                    variant="ghost" 
+                    size="sm" 
+                    className="h-10 w-10 p-0 flex items-center justify-center shrink-0 border border-input rounded-md hover:bg-accent" 
+                    onClick={() => setIsEditingTargets(true)}
+                    title="Target Settings"
+                  >
+                    <Plus className="h-4 w-4" />
+                  </Button>
+                )}
+              </div>
+            ) : null}
           </CardHeader>
           <CardContent className="p-0 overflow-x-auto">
             <div className="p-4">
